@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "weather": {
+      "type": "stdio",
+      "command": "uv",
+      "args": ["--directory",
+              "/Users/gavin/Workspace/AI/MCP/local_server",
+              "run",
+              "weather.py"]
+      },
+    "myhttpmcp": {
+      "type": "sse",
+      "url": "http://localhost:8080/sse"
+    }
+  }
+}

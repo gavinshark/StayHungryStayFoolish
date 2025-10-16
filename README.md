@@ -1,0 +1,65 @@
+# This is a version for coding study with tiny projects.
+1. Algorithm
+- MachineLearning
+	- TainChi
+		- CarSellPredict(Python)
+	- study
+		- MachineLearning-Homework-of-StanfordUniversity(matlab & Python)
+- Random
+    - StatelessDistribution
+        - StateLessDistributionByMD5(CSharp)
+        
+2. Program
+- HTTP
+	- TinyWebServer(GCC & VC)
+- Threads
+	- singleton(C++)
+    - timeoutFunction(C++)
+    - timerloop(Python)
+	- race(Python)
+    - DeadLock(VC++)
+- DNS
+	- DNSQuery(VC)
+- k8s
+	- busybox(yaml)
+- MultiLanguageCall
+	- PythonCallCPlusPlus(VC & Python)
+- Exception
+	- Python(Python)    
+- CPlusPlus
+	- Cpp11(C++)
+    - SysinternalsSuite(C++)
+    - FileWatcher(CSharp)   
+    - MapFile(VC++)    
+    - DllABI(VC++)
+    - FileWriteAndRead(VC++) 
+    - SocketDemo(g++)
+- Java
+	- Spring test(Java)
+	- JavaCommonDemo(Java)
+	- DubboDemo(Java)
+	- MybatisDemo(Java)
+	- SpringBootDemo(Java)
+- SysinternalsSuite
+    - HeapCroputionTest(C++)
+- NameMangling
+    - NameMangling(C++)    
+- GO
+    - iterateStruct(GO)
+    - k8sdemo(GO)
+    - signaltest(GO)
+- EMCAScript
+    - memleak(nodejs)
+    - asyncStudy(nodejs)
+- Python
+	- addTimestampWatermarktoImgs(Python)
+	
+3. Topic
+- ActiveDirectory
+	- ADDemo(C++)
+- Test
+    - Duplicator_Test(Node)
+- Web
+    - nginx(.conf)
+- Security
+    - cron-invade-sample
