@@ -1,0 +1,37 @@
+# 编译输出
+build/
+output/
+*.o
+*.obj
+*.exe
+*.out
+*.app
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 日志文件
+*.log
+
+# 第三方库（如果通过git submodule管理则不需要忽略）
+third_party/asio/
+third_party/json/
+third_party/spdlog/
+third_party/googletest/
+third_party/rapidcheck/
+
+# 操作系统
+.DS_Store
+Thumbs.db

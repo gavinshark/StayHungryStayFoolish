@@ -1,0 +1,34 @@
+{
+  "listen_port": 8080,
+  "log_level": "info",
+  "log_file": "gateway.log",
+  "backend_timeout_ms": 5000,
+  "client_timeout_ms": 30000,
+  "routes": [
+    {
+      "path_pattern": "/api/users",
+      "match_type": "prefix",
+      "priority": 1,
+      "backends": [
+        "http://localhost:9001",
+        "http://localhost:9002"
+      ]
+    },
+    {
+      "path_pattern": "/api/orders",
+      "match_type": "prefix",
+      "priority": 2,
+      "backends": [
+        "http://localhost:9003"
+      ]
+    },
+    {
+      "path_pattern": "/health",
+      "match_type": "exact",
+      "priority": 0,
+      "backends": [
+        "http://localhost:9001"
+      ]
+    }
+  ]
+}
