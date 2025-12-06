@@ -3,9 +3,27 @@
 #include "logger.hpp"
 #include <sstream>
 #include <thread>
+#include <vector>
 
-// 注意：这是一个简化的实现，用于演示
-// 实际项目应该使用Asio库进行真正的异步网络I/O
+#ifdef _WIN32
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+    #pragma comment(lib, "ws2_32.lib")
+    typedef int socklen_t;
+#else
+    #include <sys/socket.h>
+    #include <netinet/in.h>
+    #include <arpa/inet.h>
+    #include <netdb.h>
+    #include <unistd.h>
+    #include <fcntl.h>
+    #include <sys/select.h>
+    #define INVALID_SOCKET -1
+    #define SOCKET_ERROR -1
+    #define closesocket close
+#endif
+
+#include <cstring>
 
 namespace gateway {
 
@@ -76,24 +94,159 @@ HttpResponse HttpClient::send_request_sync(
     const HttpRequest& request, 
     std::chrono::milliseconds timeout)
 {
-    // 这是一个模拟实现
-    // 实际应该使用socket进行真正的网络通信
+    Logger::debug("Sending HTTP request to " + host + ":" + std::to_string(port) + request.path);
     
-    Logger::debug("Sending request to " + host + ":" + std::to_string(port) + request.path);
+    // 1. 创建 socket
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock == INVALID_SOCKET) {
+        throw std::runtime_error("Failed to create socket");
+    }
     
-    // 模拟网络延迟
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    // 2. 设置超时
+    set_socket_timeout(sock, timeout);
     
-    // 返回一个模拟的成功响应
-    HttpResponse response;
-    response.version = "HTTP/1.1";
-    response.status_code = 200;
-    response.status_message = "OK";
-    response.headers["Content-Type"] = "text/plain";
-    response.body = "Response from backend";
-    response.headers["Content-Length"] = std::to_string(response.body.length());
+    try {
+        // 3. 解析主机名
+        struct sockaddr_in server_addr{};
+        server_addr.sin_family = AF_INET;
+        server_addr.sin_port = htons(port);
+        
+        // 尝试直接解析 IP 地址
+        if (inet_pton(AF_INET, host.c_str(), &server_addr.sin_addr) != 1) {
+            // 不是 IP 地址，需要 DNS 解析
+            struct hostent* he = gethostbyname(host.c_str());
+            if (he == nullptr) {
+                throw std::runtime_error("Failed to resolve host: " + host);
+            }
+            memcpy(&server_addr.sin_addr, he->h_addr_list[0], he->h_length);
+        }
+        
+        // 4. 连接到服务器
+        if (connect(sock, reinterpret_cast<struct sockaddr*>(&server_addr), 
+                   sizeof(server_addr)) == SOCKET_ERROR) {
+            throw std::runtime_error("Failed to connect to " + host + ":" + std::to_string(port));
+        }
+        
+        Logger::debug("Connected to " + host + ":" + std::to_string(port));
+        
+        // 5. 发送 HTTP 请求
+        std::string request_str = request.to_string();
+        int total_sent = 0;
+        int request_len = static_cast<int>(request_str.length());
+        
+        while (total_sent < request_len) {
+            int sent = send(sock, request_str.c_str() + total_sent, 
+                          request_len - total_sent, 0);
+            if (sent == SOCKET_ERROR) {
+                throw std::runtime_error("Failed to send request");
+            }
+            total_sent += sent;
+        }
+        
+        Logger::debug("Request sent (" + std::to_string(total_sent) + " bytes)");
+        
+        // 6. 接收响应
+        std::string response_data;
+        std::vector<char> buffer(4096);
+        
+        while (true) {
+            int received = recv(sock, buffer.data(), buffer.size(), 0);
+            
+            if (received == SOCKET_ERROR) {
+                throw std::runtime_error("Failed to receive response");
+            }
+            
+            if (received == 0) {
+                // 连接关闭
+                break;
+            }
+            
+            response_data.append(buffer.data(), received);
+            
+            // 检查是否接收完整（简化版：检查是否有 Content-Length）
+            if (is_response_complete(response_data)) {
+                break;
+            }
+        }
+        
+        Logger::debug("Response received (" + std::to_string(response_data.length()) + " bytes)");
+        
+        // 7. 关闭 socket
+        closesocket(sock);
+        
+        // 8. 解析响应
+        HttpResponse response = HttpParser::parse_response(response_data);
+        
+        return response;
+        
+    } catch (...) {
+        closesocket(sock);
+        throw;
+    }
+}
+
+void HttpClient::set_socket_timeout(int sock, std::chrono::milliseconds timeout) {
+    int timeout_ms = static_cast<int>(timeout.count());
     
-    return response;
+#ifdef _WIN32
+    // Windows: 超时单位是毫秒
+    DWORD timeout_val = timeout_ms;
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, 
+              reinterpret_cast<const char*>(&timeout_val), sizeof(timeout_val));
+    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, 
+              reinterpret_cast<const char*>(&timeout_val), sizeof(timeout_val));
+#else
+    // Linux/macOS: 超时使用 timeval 结构
+    struct timeval tv;
+    tv.tv_sec = timeout_ms / 1000;
+    tv.tv_usec = (timeout_ms % 1000) * 1000;
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+#endif
+}
+
+bool HttpClient::is_response_complete(const std::string& response_data) {
+    // 查找响应头结束标记
+    size_t header_end = response_data.find("\r\n\r\n");
+    if (header_end == std::string::npos) {
+        return false;  // 还没收到完整的头部
+    }
+    
+    // 提取头部
+    std::string headers = response_data.substr(0, header_end);
+    
+    // 查找 Content-Length
+    size_t cl_pos = headers.find("Content-Length:");
+    if (cl_pos == std::string::npos) {
+        cl_pos = headers.find("content-length:");
+    }
+    
+    if (cl_pos != std::string::npos) {
+        // 找到 Content-Length，解析它
+        size_t value_start = headers.find(':', cl_pos) + 1;
+        size_t value_end = headers.find('\r', value_start);
+        std::string length_str = headers.substr(value_start, value_end - value_start);
+        
+        // 去除空格
+        length_str.erase(0, length_str.find_first_not_of(" \t"));
+        length_str.erase(length_str.find_last_not_of(" \t") + 1);
+        
+        int content_length = std::stoi(length_str);
+        int body_start = static_cast<int>(header_end + 4);
+        int body_length = static_cast<int>(response_data.length()) - body_start;
+        
+        return body_length >= content_length;
+    }
+    
+    // 如果没有 Content-Length，检查 Transfer-Encoding: chunked
+    if (headers.find("Transfer-Encoding: chunked") != std::string::npos ||
+        headers.find("transfer-encoding: chunked") != std::string::npos) {
+        // 检查是否以 "0\r\n\r\n" 结尾（chunked 结束标记）
+        return response_data.find("0\r\n\r\n", header_end) != std::string::npos;
+    }
+    
+    // 如果既没有 Content-Length 也没有 chunked，假设连接关闭时响应完成
+    return false;
 }
 
 } // namespace gateway

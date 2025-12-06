@@ -1,12 +1,14 @@
 #include "gateway.hpp"
+#include "config_manager.hpp"
 #include "logger.hpp"
 #include <condition_variable>
 #include <mutex>
 
 namespace gateway {
 
-Gateway::Gateway(const GatewayConfig& config)
-    : config_(config)
+Gateway::Gateway(const GatewayConfig& config, const std::string& config_path)
+    : config_path_(config_path)
+    , config_(config)
     , server_(std::make_unique<HttpServer>(config.listen_port))
     , client_(std::make_unique<HttpClient>())
     , router_(std::make_unique<RequestRouter>())
@@ -23,10 +25,16 @@ Gateway::Gateway(const GatewayConfig& config)
             handle_request(req, resp);
         }
     );
+    
+    // 如果提供了配置文件路径，创建配置监控器
+    if (!config_path_.empty()) {
+        config_watcher_ = std::make_unique<ConfigWatcher>(config_path_);
+    }
 }
 
 Gateway::~Gateway() {
     stop();
+    disable_hot_reload();
 }
 
 void Gateway::start() {
@@ -73,7 +81,7 @@ void Gateway::handle_request(const HttpRequest& request, HttpResponse& response)
         std::string backend_url = *backend_opt;
         Logger::debug("Selected backend: " + backend_url);
         
-        // 转发请求到后端
+        // 转发请求到后端（使用读取的超时配置）
         forward_request(request, backend_url, response);
         
         // 记录响应
@@ -92,6 +100,13 @@ void Gateway::forward_request(const HttpRequest& request,
                               const std::string& backend_url,
                               HttpResponse& response)
 {
+    // 读取超时配置
+    int backend_timeout;
+    {
+        std::shared_lock<std::shared_mutex> config_lock(config_mutex_);
+        backend_timeout = config_.backend_timeout_ms;
+    }
+    
     // 使用条件变量等待异步请求完成
     std::mutex mtx;
     std::condition_variable cv;
@@ -117,17 +132,92 @@ void Gateway::forward_request(const HttpRequest& request,
             completed = true;
             cv.notify_one();
         },
-        std::chrono::milliseconds(config_.backend_timeout_ms)
+        std::chrono::milliseconds(backend_timeout)
     );
     
     // 等待请求完成（带超时）
     std::unique_lock<std::mutex> lock(mtx);
-    if (!cv.wait_for(lock, std::chrono::milliseconds(config_.backend_timeout_ms + 1000),
+    if (!cv.wait_for(lock, std::chrono::milliseconds(backend_timeout + 1000),
                      [&]{ return completed; })) {
         // 超时
         Logger::error("Backend request timeout: " + backend_url);
         load_balancer_->mark_backend_unhealthy(backend_url);
         response = HttpResponse::make_504();
+    }
+}
+
+void Gateway::reload_config(const std::string& config_path) {
+    Logger::info("Reloading configuration from: " + config_path);
+    
+    try {
+        // 加载新配置
+        GatewayConfig new_config = ConfigManager::load_from_file(config_path);
+        
+        // 应用新配置
+        apply_config(new_config);
+        
+        Logger::info("Configuration reloaded successfully");
+    } catch (const std::exception& e) {
+        Logger::error("Failed to reload configuration: " + std::string(e.what()));
+        throw;
+    }
+}
+
+void Gateway::apply_config(const GatewayConfig& new_config) {
+    // 使用写锁更新配置（阻塞所有读取）
+    std::unique_lock<std::shared_mutex> lock(config_mutex_);
+    
+    // 更新配置
+    config_ = new_config;
+    
+    // 更新路由规则
+    router_->clear_routes();
+    for (const auto& route : config_.routes) {
+        router_->add_route(route);
+    }
+    
+    // 注意：这里不重启服务器，因为端口变更需要重启整个程序
+    // 实际生产环境中，端口变更应该通过重启服务来实现
+    if (new_config.listen_port != config_.listen_port) {
+        Logger::warn("Listen port changed, but server restart is required to apply");
+    }
+    
+    Logger::info("Configuration applied: " + std::to_string(config_.routes.size()) + " routes loaded");
+}
+
+void Gateway::enable_hot_reload() {
+    if (!config_watcher_) {
+        Logger::warn("Config watcher not initialized, cannot enable hot reload");
+        return;
+    }
+    
+    if (config_watcher_->is_running()) {
+        Logger::warn("Hot reload already enabled");
+        return;
+    }
+    
+    // 启动配置监控
+    config_watcher_->start([this](const std::string& path) {
+        on_config_changed(path);
+    });
+    
+    Logger::info("Hot reload enabled");
+}
+
+void Gateway::disable_hot_reload() {
+    if (config_watcher_ && config_watcher_->is_running()) {
+        config_watcher_->stop();
+        Logger::info("Hot reload disabled");
+    }
+}
+
+void Gateway::on_config_changed(const std::string& config_path) {
+    Logger::info("Configuration file changed, reloading...");
+    
+    try {
+        reload_config(config_path);
+    } catch (const std::exception& e) {
+        Logger::error("Failed to reload configuration after file change: " + std::string(e.what()));
     }
 }
 

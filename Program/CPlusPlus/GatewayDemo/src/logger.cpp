@@ -1,6 +1,13 @@
 #include "logger.hpp"
 #include <algorithm>
 #include <iomanip>
+#include <sys/stat.h>
+#include <sys/types.h>
+
+#ifdef _WIN32
+#include <direct.h>
+#define mkdir(path, mode) _mkdir(path)
+#endif
 
 namespace gateway {
 
@@ -11,20 +18,30 @@ std::mutex Logger::mutex_;
 bool Logger::initialized_ = false;
 
 void Logger::init(const std::string& log_file, const std::string& log_level) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        
+        // 设置日志级别
+        current_level_ = string_to_level(log_level);
+        
+        // 创建日志目录（如果需要）
+        size_t last_slash = log_file.find_last_of("/\\");
+        if (last_slash != std::string::npos) {
+            std::string log_dir = log_file.substr(0, last_slash);
+            // 尝试创建目录（如果已存在会失败，但不影响）
+            mkdir(log_dir.c_str(), 0755);
+        }
+        
+        // 打开日志文件
+        log_file_.open(log_file, std::ios::app);
+        if (!log_file_.is_open()) {
+            std::cerr << "Warning: Failed to open log file: " << log_file << std::endl;
+        }
+        
+        initialized_ = true;
+    }  // 释放锁
     
-    // 设置日志级别
-    current_level_ = string_to_level(log_level);
-    
-    // 打开日志文件
-    log_file_.open(log_file, std::ios::app);
-    if (!log_file_.is_open()) {
-        std::cerr << "Warning: Failed to open log file: " << log_file << std::endl;
-    }
-    
-    initialized_ = true;
-    
-    // 记录初始化信息
+    // 记录初始化信息（在锁外调用，避免死锁）
     info("Logger initialized with level: " + log_level);
 }
 

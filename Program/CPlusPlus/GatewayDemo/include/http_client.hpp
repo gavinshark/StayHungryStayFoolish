@@ -33,10 +33,16 @@ private:
     
     UrlInfo parse_url(const std::string& url);
     
-    // 同步发送请求（简化实现）
+    // 同步发送请求（真实的 HTTP 请求）
     HttpResponse send_request_sync(const std::string& host, uint16_t port, 
                                    const HttpRequest& request, 
                                    std::chrono::milliseconds timeout);
+    
+    // 设置 socket 超时
+    void set_socket_timeout(int sock, std::chrono::milliseconds timeout);
+    
+    // 检查响应是否接收完整
+    bool is_response_complete(const std::string& response_data);
 };
 
 } // namespace gateway
