@@ -11,33 +11,22 @@
 | `build.sh` | CMake 自动化构建脚本 | Linux, macOS |
 | `build.bat` | CMake 自动化构建脚本 | Windows |
 
-## 构建方法
+## 前置要求
 
-### 方法 1: 使用 Makefile（推荐，快速）
-
-#### Linux / macOS
+在构建之前，请确保已安装第三方依赖：
 
 ```bash
-# 从项目根目录
-./make.sh
-
-# 或从 build 目录
-cd build
-make
+# 从项目根目录运行
+./third_party/install_deps.sh
 ```
 
-#### Windows (MinGW)
+详细说明请参考 `third_party/README.md`。
 
-```cmd
-cd build
-mingw32-make
-```
+## 构建方法
 
-**编译产物**:
-- 目标文件: `output/obj/*.o`
-- 可执行文件: `output/gateway` (Linux/macOS) 或 `output/gateway.exe` (Windows)
+### 方法 1: 使用 CMake（推荐）
 
-### 方法 2: 使用 CMake（跨平台，功能完整）
+CMake是推荐的构建方式，支持第三方库集成。
 
 #### Linux / macOS
 
@@ -70,6 +59,28 @@ mingw32-make
 
 **编译产物**:
 - 可执行文件: `output/gateway` (Linux/macOS) 或 `output/gateway.exe` (Windows)
+
+### 方法 2: 使用 Makefile（已弃用）
+
+**注意**: Makefile不包含新的第三方库依赖，建议使用CMake。
+
+#### Linux / macOS
+
+```bash
+# 从项目根目录
+./make.sh
+
+# 或从 build 目录
+cd build
+make
+```
+
+#### Windows (MinGW)
+
+```cmd
+cd build
+mingw32-make
+```
 
 ## 清理构建文件
 
@@ -121,10 +132,27 @@ output/
 | Windows | MSVC | 2017+ |
 | Windows | MinGW (GCC) | 7.0+ |
 
+## 第三方库配置
+
+CMakeLists.txt会自动检测以下第三方库：
+
+- **Asio**: `third_party/asio/asio/include`
+- **nlohmann/json**: `third_party/json/include`
+- **spdlog**: `third_party/spdlog/include`
+- **http-parser** (可选): `third_party/http-parser`
+
+如果CMake找不到这些库，会显示警告信息。
+
 ## 常见问题
 
+### Q: CMake找不到第三方库？
+A: 运行依赖安装脚本:
+```bash
+./third_party/install_deps.sh
+```
+
 ### Q: 编译时找不到头文件？
-A: 确保 `include/` 目录存在且包含所有必要的头文件。
+A: 确保 `include/` 目录存在且包含所有必要的头文件，并且已安装第三方依赖。
 
 ### Q: 链接时出现 undefined reference 错误？
 A: 

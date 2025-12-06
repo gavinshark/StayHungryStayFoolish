@@ -3,8 +3,12 @@
 #include "config_types.hpp"
 #include <string>
 #include <stdexcept>
+#include <nlohmann/json.hpp>
 
 namespace gateway {
+
+// 使用nlohmann::json
+using json = nlohmann::json;
 
 class ConfigError : public std::runtime_error {
 public:
@@ -22,7 +26,7 @@ public:
 
 private:
     // 解析JSON配置
-    static GatewayConfig parse_json(const std::string& json_content);
+    static GatewayConfig parse_json(const json& j);
     
     // 解析匹配类型
     static MatchType parse_match_type(const std::string& type_str);

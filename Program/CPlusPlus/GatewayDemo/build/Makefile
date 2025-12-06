@@ -14,9 +14,18 @@ OUT_DIR = ../output
 SOURCES = $(wildcard $(SRC_DIR)/*.cpp)
 OBJECTS = $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SOURCES))
 
+# 第三方库目录
+THIRD_PARTY_DIR = ../third_party
+
 # 编译器设置
 CXX = g++
 CXXFLAGS = -std=c++17 -Wall -Wextra -I$(INC_DIR)
+
+# 添加第三方库头文件路径
+CXXFLAGS += -I$(THIRD_PARTY_DIR)/spdlog/include
+CXXFLAGS += -I$(THIRD_PARTY_DIR)/json/include
+CXXFLAGS += -I$(THIRD_PARTY_DIR)/asio/asio/include
+CXXFLAGS += -DASIO_STANDALONE
 
 # 平台检测
 ifeq ($(OS),Windows_NT)

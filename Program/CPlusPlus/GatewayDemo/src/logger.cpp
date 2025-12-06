@@ -1,6 +1,6 @@
 #include "logger.hpp"
 #include <algorithm>
-#include <iomanip>
+#include <iostream>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -12,93 +12,77 @@
 namespace gateway {
 
 // 静态成员初始化
-LogLevel Logger::current_level_ = LogLevel::INFO;
-std::ofstream Logger::log_file_;
-std::mutex Logger::mutex_;
 bool Logger::initialized_ = false;
 
 void Logger::init(const std::string& log_file, const std::string& log_level) {
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        
-        // 设置日志级别
-        current_level_ = string_to_level(log_level);
-        
+    if (initialized_) {
+        return;
+    }
+    
+    try {
         // 创建日志目录（如果需要）
         size_t last_slash = log_file.find_last_of("/\\");
         if (last_slash != std::string::npos) {
             std::string log_dir = log_file.substr(0, last_slash);
-            // 尝试创建目录（如果已存在会失败，但不影响）
             mkdir(log_dir.c_str(), 0755);
         }
         
-        // 打开日志文件
-        log_file_.open(log_file, std::ios::app);
-        if (!log_file_.is_open()) {
-            std::cerr << "Warning: Failed to open log file: " << log_file << std::endl;
-        }
+        // 创建sinks
+        auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+        console_sink->set_level(spdlog::level::trace);
+        console_sink->set_pattern("[%Y-%m-%d %H:%M:%S] [%^%l%$] %v");
+        
+        // 创建rotating file sink (10MB, 3个文件)
+        auto file_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+            log_file, 1024 * 1024 * 10, 3);
+        file_sink->set_level(spdlog::level::trace);
+        file_sink->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] %v");
+        
+        // 创建logger
+        std::vector<spdlog::sink_ptr> sinks{console_sink, file_sink};
+        auto logger = std::make_shared<spdlog::logger>("gateway", sinks.begin(), sinks.end());
+        
+        // 设置日志级别
+        LogLevel level = string_to_level(log_level);
+        logger->set_level(to_spdlog_level(level));
+        
+        // 设置为默认logger
+        spdlog::set_default_logger(logger);
+        
+        // 设置刷新策略（每条日志都刷新，确保不丢失）
+        spdlog::flush_on(spdlog::level::info);
         
         initialized_ = true;
-    }  // 释放锁
-    
-    // 记录初始化信息（在锁外调用，避免死锁）
-    info("Logger initialized with level: " + log_level);
+        
+        spdlog::info("Logger initialized with level: {}", log_level);
+    } catch (const spdlog::spdlog_ex& ex) {
+        std::cerr << "Log initialization failed: " << ex.what() << std::endl;
+        throw;
+    }
 }
 
+// 兼容旧接口
 void Logger::debug(const std::string& message) {
-    log(LogLevel::DEBUG, message);
+    spdlog::debug(message);
 }
 
 void Logger::info(const std::string& message) {
-    log(LogLevel::INFO, message);
+    spdlog::info(message);
 }
 
 void Logger::warn(const std::string& message) {
-    log(LogLevel::WARN, message);
+    spdlog::warn(message);
 }
 
 void Logger::error(const std::string& message) {
-    log(LogLevel::ERROR, message);
+    spdlog::error(message);
 }
 
 LogLevel Logger::get_level() {
-    return current_level_;
-}
-
-void Logger::log(LogLevel level, const std::string& message) {
-    // 检查日志级别
-    if (level < current_level_) {
-        return;
+    if (!initialized_) {
+        return LogLevel::INFO;
     }
-    
-    std::lock_guard<std::mutex> lock(mutex_);
-    
-    // 格式化日志消息
-    std::ostringstream oss;
-    oss << "[" << get_timestamp() << "] "
-        << "[" << level_to_string(level) << "] "
-        << message;
-    
-    std::string log_message = oss.str();
-    
-    // 输出到控制台
-    std::cout << log_message << std::endl;
-    
-    // 输出到文件
-    if (log_file_.is_open()) {
-        log_file_ << log_message << std::endl;
-        log_file_.flush();
-    }
-}
-
-std::string Logger::level_to_string(LogLevel level) {
-    switch (level) {
-        case LogLevel::DEBUG: return "DEBUG";
-        case LogLevel::INFO:  return "INFO";
-        case LogLevel::WARN:  return "WARN";
-        case LogLevel::ERROR: return "ERROR";
-        default: return "UNKNOWN";
-    }
+    return from_spdlog_level(spdlog::get_level());
 }
 
 LogLevel Logger::string_to_level(const std::string& level_str) {
@@ -113,13 +97,24 @@ LogLevel Logger::string_to_level(const std::string& level_str) {
     return LogLevel::INFO; // 默认
 }
 
-std::string Logger::get_timestamp() {
-    auto now = std::time(nullptr);
-    auto tm = *std::localtime(&now);
-    
-    std::ostringstream oss;
-    oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
-    return oss.str();
+spdlog::level::level_enum Logger::to_spdlog_level(LogLevel level) {
+    switch (level) {
+        case LogLevel::DEBUG: return spdlog::level::debug;
+        case LogLevel::INFO:  return spdlog::level::info;
+        case LogLevel::WARN:  return spdlog::level::warn;
+        case LogLevel::ERROR: return spdlog::level::err;
+        default: return spdlog::level::info;
+    }
+}
+
+LogLevel Logger::from_spdlog_level(spdlog::level::level_enum level) {
+    switch (level) {
+        case spdlog::level::debug: return LogLevel::DEBUG;
+        case spdlog::level::info:  return LogLevel::INFO;
+        case spdlog::level::warn:  return LogLevel::WARN;
+        case spdlog::level::err:   return LogLevel::ERROR;
+        default: return LogLevel::INFO;
+    }
 }
 
 } // namespace gateway

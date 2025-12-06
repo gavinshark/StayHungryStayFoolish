@@ -33,10 +33,11 @@ cmake_install.cmake
 *.log
 log/
 
-# 第三方库（如果通过git submodule管理则不需要忽略）
+# 第三方库（通过install_deps.sh安装）
 third_party/asio/
 third_party/json/
 third_party/spdlog/
+third_party/http-parser/
 third_party/googletest/
 third_party/rapidcheck/
 
