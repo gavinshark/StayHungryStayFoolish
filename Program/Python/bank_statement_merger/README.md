@@ -5,7 +5,7 @@ https://mirrors.aliyun.com/python-release/windows/python-3.12.0-amd64.exe
 双击exe安装，勾选add to path
 
 2、编辑映射关系
-打开mapping_config.json，编辑 银行excel表头：目标excel表头 关系
+打开mapping_config.csv，编辑 银行excel表头：目标excel表头 关系
 
 3、运行主程序
 双击start-up.bat
