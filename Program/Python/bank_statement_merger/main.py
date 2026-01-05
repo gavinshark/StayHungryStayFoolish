@@ -25,6 +25,7 @@ class BankStatementMerger(QMainWindow):
         self.setGeometry(100, 100, 900, 700)
         self.setWindowIcon(self.create_app_icon())
         
+        self.result_column_order = []  # 记录结果列的顺序
         self.mapping_config = self.load_mapping_config()
         self.merged_data = None
         self.import_folder_path = None  # 记录导入的文件夹路径
@@ -55,29 +56,71 @@ class BankStatementMerger(QMainWindow):
     
     def load_mapping_config(self):
         """加载映射配置"""
-        config_path = Path(__file__).parent / "mapping_config.json"
+        config_path = Path(__file__).parent / "mapping_config.csv"
         if config_path.exists():
-            with open(config_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+            try:
+                df = pd.read_csv(config_path, encoding='utf-8')
+                mapping_config = {}
+                
+                # 获取银行列名（除了第一列结果表头）
+                bank_columns = df.columns[1:].tolist()
+                
+                # 记录结果表头的顺序
+                self.result_column_order = df.iloc[:, 0].tolist()
+                
+                # 初始化每个银行的映射配置
+                for bank in bank_columns:
+                    mapping_config[bank] = {}
+                
+                # 从CSV构建映射配置
+                for _, row in df.iterrows():
+                    result_header = row.iloc[0]  # 结果表头
+                    
+                    # 为每个银行添加映射
+                    for i, bank in enumerate(bank_columns, 1):
+                        bank_col = row.iloc[i]
+                        if pd.notna(bank_col) and str(bank_col).strip():
+                            mapping_config[bank][str(bank_col).strip()] = result_header
+                
+                return mapping_config
+            except Exception as e:
+                self.log(f"读取CSV配置文件失败: {e}")
+                return self.get_default_mapping()
         return self.get_default_mapping()
     
     def get_default_mapping(self):
         """默认映射配置"""
+        # 设置默认的列顺序
+        self.result_column_order = [
+            "交易日期", "记账日期", "账号", "账户", "对方账号", 
+            "金额", "发生额", "备注", "摘要", "面额余额", "账户余额"
+        ]
+        
         return {
             "工商银行": {
-                "交易时间": "日期", "交易日期": "日期", "帐户": "账号", "账户": "账号",
-                "对方账户": "对方账号", "交易金额": "金额", "发生额": "金额",
-                "摘要": "备注", "交易摘要": "备注", "余额": "余额", "账户余额": "余额"
+                "交易时间": "交易日期", "交易日期": "记账日期", "帐户": "账号", "账户": "账户",
+                "对方账户": "对方账号", "交易金额": "金额", "发生额": "发生额",
+                "摘要": "备注", "交易摘要": "摘要", "余额": "面额余额", "账户余额": "账户余额"
             },
             "建设银行": {
-                "时间": "日期", "记账日期": "日期", "帐号": "账号", "卡号": "账号",
-                "对方帐号": "对方账号", "金额": "金额", "收支金额": "金额",
-                "备注信息": "备注", "附言": "备注", "当前余额": "余额"
+                "时间": "交易日期", "记账日期": "记账日期", "帐号": "账号", "卡号": "账户",
+                "对方帐号": "对方账号", "金额": "金额", "收支金额": "发生额",
+                "备注信息": "备注", "附言": "摘要", "当前余额": "面额余额"
             },
             "招商银行": {
-                "交易日": "日期", "入账日期": "日期", "账户号": "账号", "我方账号": "账号",
-                "他方账号": "对方账号", "交易额": "金额", "人民币金额": "金额",
-                "用途": "备注", "交易备注": "备注", "账面余额": "余额"
+                "交易日": "交易日期", "入账日期": "记账日期", "账户号": "账号", "我方账号": "账户",
+                "他方账号": "对方账号", "交易额": "金额", "人民币金额": "发生额",
+                "用途": "备注", "交易备注": "摘要", "账面余额": "面额余额"
+            },
+            "农业银行": {
+                "交易时间": "交易日期", "记账时间": "记账日期", "本方账号": "账号", "账号": "账户",
+                "对方账号": "对方账号", "交易金额": "金额", "发生金额": "发生额",
+                "摘要": "备注", "附言": "摘要", "账户余额": "账户余额"
+            },
+            "中国银行": {
+                "交易日期": "交易日期", "记账日期": "记账日期", "账户": "账号", "本方账户": "账户",
+                "对方账户": "对方账号", "交易金额": "金额", "借贷金额": "发生额",
+                "交易摘要": "备注", "备注": "摘要", "余额": "面额余额"
             }
         }
     
@@ -155,6 +198,27 @@ class BankStatementMerger(QMainWindow):
         rename_dict = {col: mapping[col] for col in df.columns if col in mapping}
         return df.rename(columns=rename_dict)
     
+    def reorder_columns(self, df):
+        """按照CSV配置的顺序重新排列列"""
+        if not self.result_column_order:
+            return df
+        
+        # 获取数据框中实际存在的列
+        existing_columns = df.columns.tolist()
+        
+        # 按照配置顺序排列存在的列
+        ordered_columns = []
+        for col in self.result_column_order:
+            if col in existing_columns:
+                ordered_columns.append(col)
+        
+        # 添加不在配置中但存在于数据框的列（如"来源文件"）
+        for col in existing_columns:
+            if col not in ordered_columns:
+                ordered_columns.append(col)
+        
+        return df[ordered_columns]
+    
     def read_file(self, filepath):
         """读取单个文件"""
         ext = filepath.suffix.lower()
@@ -211,6 +275,8 @@ class BankStatementMerger(QMainWindow):
         
         if all_data:
             self.merged_data = pd.concat(all_data, ignore_index=True)
+            # 按照CSV配置的顺序重新排列列
+            self.merged_data = self.reorder_columns(self.merged_data)
             self.log(f"汇总完成: 共处理 {processed} 个文件, {len(self.merged_data)} 条记录")
             self.status_label.setText(f"已汇总 {len(self.merged_data)} 条记录")
             self.export_btn.setEnabled(True)
@@ -294,9 +360,18 @@ class BankStatementMerger(QMainWindow):
         folder_path = Path(folder)
         
         # 生成映射配置文件
-        config_path = folder_path / "mapping_config.json"
-        with open(config_path, 'w', encoding='utf-8') as f:
-            json.dump(self.mapping_config, f, ensure_ascii=False, indent=2)
+        config_path = folder_path / "mapping_config.csv"
+        # 创建CSV格式的配置文件，包含所有银行
+        csv_data = {
+            '结果表头': ['日期', '日期', '账号', '账号', '对方账号', '金额', '金额', '备注', '备注', '余额', '余额'],
+            '工商银行': ['交易时间', '交易日期', '帐户', '账户', '对方账户', '交易金额', '发生额', '摘要', '交易摘要', '余额', '账户余额'],
+            '建设银行': ['时间', '记账日期', '帐号', '卡号', '对方帐号', '金额', '收支金额', '备注信息', '附言', '当前余额', ''],
+            '招商银行': ['交易日', '入账日期', '账户号', '我方账号', '他方账号', '交易额', '人民币金额', '用途', '交易备注', '账面余额', ''],
+            '农业银行': ['交易时间', '记账时间', '本方账号', '账号', '对方账号', '交易金额', '发生金额', '摘要', '附言', '账户余额', ''],
+            '中国银行': ['交易日期', '记账日期', '账户', '本方账户', '对方账户', '交易金额', '借贷金额', '交易摘要', '备注', '余额', '']
+        }
+        config_df = pd.DataFrame(csv_data)
+        config_df.to_csv(config_path, index=False, encoding='utf-8-sig')
         self.log(f"生成映射配置: {config_path.name}")
         
         # 工商银行示例数据
@@ -329,10 +404,32 @@ class BankStatementMerger(QMainWindow):
             "账面余额": [8000.00, 7700.00, 8900.00]
         }
         
+        # 农业银行示例数据
+        abc_data = {
+            "交易时间": ["2024-01-01", "2024-01-02", "2024-01-03"],
+            "本方账号": ["6228481234567890", "6228481234567890", "6228481234567890"],
+            "对方账号": ["6222021234567890", "6217001234567890", "6225881234567890"],
+            "交易金额": [600.00, -150.00, 900.00],
+            "摘要": ["转入", "提取", "收入"],
+            "账户余额": [6000.00, 5850.00, 6750.00]
+        }
+        
+        # 中国银行示例数据
+        boc_data = {
+            "交易日期": ["2024-01-01", "2024-01-02", "2024-01-03"],
+            "账户": ["6217001234567890", "6217001234567890", "6217001234567890"],
+            "对方账户": ["6222021234567890", "6228481234567890", "6225881234567890"],
+            "交易金额": [500.00, -200.00, 1500.00],
+            "交易摘要": ["收款", "消费", "转入"],
+            "余额": [5000.00, 4800.00, 6300.00]
+        }
+        
         demo_files = [
             ("工商银行流水_demo.xlsx", icbc_data, "xlsx"),
             ("建设银行流水_demo.xls", ccb_data, "xls"),
-            ("招商银行流水_demo.csv", cmb_data, "csv")
+            ("招商银行流水_demo.csv", cmb_data, "csv"),
+            ("农业银行流水_demo.xlsx", abc_data, "xlsx"),
+            ("中国银行流水_demo.csv", boc_data, "csv")
         ]
         
         for filename, data, fmt in demo_files:
