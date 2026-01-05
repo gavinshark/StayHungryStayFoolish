@@ -1,5 +1,4 @@
 # 编译输出
-build/
 output/
 *.o
 *.obj
@@ -7,11 +6,19 @@ output/
 *.out
 *.app
 
+# Build 目录中的临时文件（但保留构建脚本）
+build/CMakeCache.txt
+build/CMakeFiles/
+build/cmake_install.cmake
+build/*.vcxproj
+build/*.vcxproj.filters
+build/*.sln
+build/*.dir/
+
 # CMake
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
-Makefile
 *.cmake
 !CMakeLists.txt
 
@@ -24,11 +31,13 @@ Makefile
 
 # 日志文件
 *.log
+log/
 
-# 第三方库（如果通过git submodule管理则不需要忽略）
+# 第三方库（通过install_deps.sh安装）
 third_party/asio/
 third_party/json/
 third_party/spdlog/
+third_party/http-parser/
 third_party/googletest/
 third_party/rapidcheck/
 

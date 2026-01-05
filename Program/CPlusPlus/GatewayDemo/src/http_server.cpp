@@ -1,40 +1,93 @@
 #include "http_server.hpp"
 #include "http_parser.hpp"
 #include "logger.hpp"
-
-#ifdef _WIN32
-    #include <winsock2.h>
-    #include <ws2tcpip.h>
-    #pragma comment(lib, "ws2_32.lib")
-    typedef int socklen_t;
-#else
-    #include <sys/socket.h>
-    #include <netinet/in.h>
-    #include <arpa/inet.h>
-    #include <unistd.h>
-    #define INVALID_SOCKET -1
-    #define SOCKET_ERROR -1
-    #define closesocket close
-#endif
-
-#include <cstring>
-#include <vector>
+#include <iostream>
 
 namespace gateway {
 
-HttpServer::HttpServer(uint16_t port)
-    : port_(port) {
-#ifdef _WIN32
-    WSADATA wsa_data;
-    WSAStartup(MAKEWORD(2, 2), &wsa_data);
-#endif
+// Connection implementation
+HttpServer::Connection::Connection(
+    asio::ip::tcp::socket socket,
+    RequestHandler handler)
+    : socket_(std::move(socket))
+    , handler_(handler)
+{
+}
+
+void HttpServer::Connection::start() {
+    do_read();
+}
+
+void HttpServer::Connection::do_read() {
+    auto self(shared_from_this());
+    
+    asio::async_read_until(socket_, buffer_, "\r\n\r\n",
+        [this, self](std::error_code ec, std::size_t bytes_transferred) {
+            if (!ec) {
+                // 读取请求数据
+                std::istream is(&buffer_);
+                std::string line;
+                std::ostringstream request_stream;
+                
+                // 读取所有数据
+                while (std::getline(is, line)) {
+                    request_stream << line << "\n";
+                }
+                
+                request_data_ = request_stream.str();
+                
+                try {
+                    // 解析HTTP请求
+                    HttpRequest request = HttpParser::parse_request(request_data_);
+                    
+                    // 处理请求
+                    HttpResponse response;
+                    if (handler_) {
+                        handler_(request, response);
+                    } else {
+                        response = HttpResponse::make_500();
+                    }
+                    
+                    // 发送响应
+                    do_write(response.to_string());
+                    
+                } catch (const std::exception& e) {
+                    Logger::error("Error parsing request: {}", e.what());
+                    HttpResponse error_response = HttpResponse::make_500();
+                    do_write(error_response.to_string());
+                }
+            } else if (ec != asio::error::operation_aborted) {
+                Logger::error("Read error: {}", ec.message());
+            }
+        });
+}
+
+void HttpServer::Connection::do_write(const std::string& response) {
+    auto self(shared_from_this());
+    
+    asio::async_write(socket_, asio::buffer(response),
+        [this, self](std::error_code ec, std::size_t /*bytes_transferred*/) {
+            if (ec && ec != asio::error::operation_aborted) {
+                Logger::error("Write error: {}", ec.message());
+            }
+            
+            // 关闭连接
+            std::error_code ignored_ec;
+            socket_.shutdown(asio::ip::tcp::socket::shutdown_both, ignored_ec);
+            socket_.close(ignored_ec);
+        });
+}
+
+// HttpServer implementation
+HttpServer::HttpServer(asio::io_context& io_context, uint16_t port)
+    : io_context_(io_context)
+    , acceptor_(io_context, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port))
+    , port_(port)
+{
 }
 
 HttpServer::~HttpServer() {
     stop();
-#ifdef _WIN32
-    WSACleanup();
-#endif
 }
 
 void HttpServer::set_request_handler(RequestHandler handler) {
@@ -47,9 +100,9 @@ void HttpServer::start() {
     }
     
     running_ = true;
-    server_thread_ = std::make_unique<std::thread>(&HttpServer::run, this);
+    do_accept();
     
-    Logger::info("HTTP Server started on port " + std::to_string(port_));
+    Logger::info("HTTP Server (Asio) started on port {}", port_);
 }
 
 void HttpServer::stop() {
@@ -59,117 +112,29 @@ void HttpServer::stop() {
     
     running_ = false;
     
-    if (server_socket_ != INVALID_SOCKET) {
-        closesocket(server_socket_);
-        server_socket_ = INVALID_SOCKET;
-    }
+    std::error_code ec;
+    acceptor_.close(ec);
     
-    if (server_thread_ && server_thread_->joinable()) {
-        server_thread_->join();
-    }
-    
-    Logger::info("HTTP Server stopped");
+    Logger::info("HTTP Server (Asio) stopped");
 }
 
-void HttpServer::run() {
-    // 创建socket
-    server_socket_ = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_socket_ == INVALID_SOCKET) {
-        Logger::error("Failed to create socket");
-        return;
-    }
-    
-    // 设置socket选项
-    int opt = 1;
-#ifdef _WIN32
-    setsockopt(server_socket_, SOL_SOCKET, SO_REUSEADDR, 
-               reinterpret_cast<const char*>(&opt), sizeof(opt));
-#else
-    setsockopt(server_socket_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-#endif
-    
-    // 绑定地址
-    sockaddr_in address{};
-    address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY;
-    address.sin_port = htons(port_);
-    
-    if (bind(server_socket_, reinterpret_cast<sockaddr*>(&address), 
-             sizeof(address)) == SOCKET_ERROR) {
-        Logger::error("Failed to bind socket to port " + std::to_string(port_));
-        closesocket(server_socket_);
-        return;
-    }
-    
-    // 监听
-    if (listen(server_socket_, 10) == SOCKET_ERROR) {
-        Logger::error("Failed to listen on socket");
-        closesocket(server_socket_);
-        return;
-    }
-    
-    Logger::info("Server listening on port " + std::to_string(port_));
-    
-    // 接受连接
-    while (running_) {
-        sockaddr_in client_addr{};
-        socklen_t client_len = sizeof(client_addr);
-        
-        int client_socket = accept(server_socket_, 
-                                   reinterpret_cast<sockaddr*>(&client_addr), 
-                                   &client_len);
-        
-        if (client_socket == INVALID_SOCKET) {
-            if (running_) {
-                Logger::warn("Failed to accept connection");
+void HttpServer::do_accept() {
+    acceptor_.async_accept(
+        [this](std::error_code ec, asio::ip::tcp::socket socket) {
+            if (!ec) {
+                // 创建新连接并启动
+                auto conn = std::make_shared<Connection>(
+                    std::move(socket), request_handler_);
+                conn->start();
+            } else if (ec != asio::error::operation_aborted) {
+                Logger::error("Accept error: {}", ec.message());
             }
-            continue;
-        }
-        
-        // 在新线程中处理客户端请求
-        std::thread(&HttpServer::handle_client, this, client_socket).detach();
-    }
-}
-
-void HttpServer::handle_client(int client_socket) {
-    try {
-        // 读取请求
-        std::vector<char> buffer(4096);
-        int bytes_received = recv(client_socket, buffer.data(), buffer.size() - 1, 0);
-        
-        if (bytes_received <= 0) {
-            closesocket(client_socket);
-            return;
-        }
-        
-        buffer[bytes_received] = '\0';
-        std::string raw_request(buffer.data(), bytes_received);
-        
-        // 解析请求
-        HttpRequest request = HttpParser::parse_request(raw_request);
-        
-        // 处理请求
-        HttpResponse response;
-        if (request_handler_) {
-            request_handler_(request, response);
-        } else {
-            response = HttpResponse::make_500();
-        }
-        
-        // 发送响应
-        std::string response_str = response.to_string();
-        send(client_socket, response_str.c_str(), response_str.length(), 0);
-        
-    } catch (const std::exception& e) {
-        Logger::error("Error handling client: " + std::string(e.what()));
-        
-        // 发送500错误
-        HttpResponse error_response = HttpResponse::make_500();
-        std::string response_str = error_response.to_string();
-        send(client_socket, response_str.c_str(), response_str.length(), 0);
-    }
-    
-    closesocket(client_socket);
+            
+            // 继续接受下一个连接
+            if (running_) {
+                do_accept();
+            }
+        });
 }
 
 } // namespace gateway
