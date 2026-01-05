@@ -1,3 +1,20 @@
+# 使用步骤
+1、安装python 3.10+
+要求windows 10以上
+https://mirrors.aliyun.com/python-release/windows/python-3.12.0-amd64.exe
+双击exe安装，勾选add to path
+
+2、编辑映射关系
+打开mapping_config.json，编辑 银行excel表头：目标excel表头 关系
+
+3、运行主程序
+双击start-up.bat
+
+4、点击“导入文件夹”，选择银行流水文件夹
+
+5、点击“导出汇总”，选择保存结果位置
+
+
 # 多银行流水汇总工具
 
 支持多家银行流水文件的自动识别、字段映射和汇总导出。
