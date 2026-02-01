@@ -1,0 +1,35 @@
+# RAGAS Evaluation Demo Configuration
+# Note: OPENAI_API_KEY and OPENAI_BASE_URL should be set as system environment variables
+
+# OpenAI/LLM Configuration
+openai:
+  # LLM Model for generation
+  model: "qwen-plus"
+  # Embedding Model for vectorization
+  embedding_model: "text-embedding-v3"
+
+# Document Processing Configuration
+document_processing:
+  # Maximum characters per chunk
+  chunk_size: 500
+  # Overlap between adjacent chunks
+  chunk_overlap: 50
+
+# Retrieval Configuration
+retrieval:
+  # Number of documents to retrieve
+  k: 4
+
+# Vector Store Configuration
+vector_store:
+  # Path to save/load vector store index
+  persist_path: "data/vector_store"
+
+# Evaluation Configuration
+evaluation:
+  # Path to evaluation dataset
+  dataset_path: "data/evaluation/test_dataset.json"
+
+# Logging Configuration
+logging:
+  level: "INFO"

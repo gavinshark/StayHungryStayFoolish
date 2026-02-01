@@ -1,0 +1,4 @@
+# file: /Users/gavinzhu/Workspace/StayHungryStayFoolish/Algorithm/MachineLearning/study/RAGAS/ragas-evaluation-demo/src/rag_chain.py
+# hypothesis_version: 6.151.4
+
+['gpt-3.5-turbo', 'query', 'result', 'source_documents', 'stuff']

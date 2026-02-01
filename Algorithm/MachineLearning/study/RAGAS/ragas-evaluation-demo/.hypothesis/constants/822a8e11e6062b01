@@ -1,0 +1,4 @@
+# file: /Users/gavinzhu/Workspace/StayHungryStayFoolish/Algorithm/MachineLearning/study/RAGAS/ragas-evaluation-demo/src/vector_store.py
+# hypothesis_version: 6.151.4
+
+['Path cannot be empty', 'api_key', 'base_url', 'k', 'model', 'similarity', 'text-embedding-v4']
