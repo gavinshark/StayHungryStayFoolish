@@ -4,7 +4,7 @@
 # OpenAI/LLM Configuration
 openai:
   # LLM Model for generation
-  model: "qwen-plus"
+  model: "deepseek-v3.2"
   # Embedding Model for vectorization
   embedding_model: "text-embedding-v3"
 
