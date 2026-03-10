@@ -1,0 +1,23 @@
+# RAGAS Evaluation Demo Dependencies
+# Core LangChain packages
+langchain>=0.1.0
+langchain-openai>=0.0.5
+langchain-community>=0.0.20
+
+# Vector store
+faiss-cpu>=1.7.4
+
+# RAGAS evaluation framework
+ragas>=0.1.0
+
+# HuggingFace datasets for RAGAS
+datasets>=2.14.0
+
+# Configuration and environment
+python-dotenv>=1.0.0
+pyyaml>=6.0.1
+
+# Testing dependencies
+pytest>=7.4.0
+hypothesis>=6.92.0
+pytest-mock>=3.12.0

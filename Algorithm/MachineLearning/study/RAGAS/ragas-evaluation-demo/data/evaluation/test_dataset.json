@@ -1,0 +1,29 @@
+{
+  "samples": [
+    {
+      "question": "什么是 RAG？",
+      "ground_truth": "RAG（Retrieval-Augmented Generation，检索增强生成）是一种结合信息检索和文本生成的人工智能技术。它通过在生成回答之前先检索相关文档，来增强大语言模型的回答质量和准确性。",
+      "contexts": ["RAG（Retrieval-Augmented Generation，检索增强生成）是一种结合信息检索和文本生成的人工智能技术。"]
+    },
+    {
+      "question": "RAG 系统的工作流程包含哪些步骤？",
+      "ground_truth": "RAG 系统的工作流程包含两个主要阶段：1）文档索引阶段，包括文档加载、文本分块、向量化和存储；2）查询阶段，包括查询向量化、相似度检索、上下文构建和答案生成。",
+      "contexts": ["RAG 系统的工作流程通常包含文档索引阶段和查询阶段。"]
+    },
+    {
+      "question": "RAGAS 框架有哪些核心评测指标？",
+      "ground_truth": "RAGAS 框架的核心评测指标包括：1）Faithfulness（忠实度）- 衡量答案与上下文的一致性；2）Answer Relevancy（答案相关性）- 衡量答案与问题的相关程度；3）Context Precision（上下文精确度）- 衡量检索结果的精确性；4）Context Recall（上下文召回率）- 衡量检索结果的完整性。",
+      "contexts": ["RAGAS 的核心评测指标包括 Faithfulness、Answer Relevancy、Context Precision 和 Context Recall。"]
+    },
+    {
+      "question": "如何优化 RAG 系统的文本分块策略？",
+      "ground_truth": "优化文本分块策略需要考虑：1）块大小选择，推荐 500-1000 字符；2）设置适当的块重叠（50-100 字符）以保持上下文连贯性；3）选择合适的分块方法，如按段落分块、按句子分块或递归分块。",
+      "contexts": ["文本分块策略包括块大小选择、重叠设置和分块方法的选择。"]
+    },
+    {
+      "question": "RAG 系统有哪些主要优势？",
+      "ground_truth": "RAG 系统的主要优势包括：1）减少幻觉 - 通过提供真实上下文减少模型编造内容；2）知识更新 - 无需重新训练模型即可更新知识；3）可追溯性 - 可以追踪答案来源；4）领域适应 - 可针对特定领域构建专业知识库。",
+      "contexts": ["RAG 的优势包括减少幻觉、知识更新、可追溯性和领域适应。"]
+    }
+  ]
+}

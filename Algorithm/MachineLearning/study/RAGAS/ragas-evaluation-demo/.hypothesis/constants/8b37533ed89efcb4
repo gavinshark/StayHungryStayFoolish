@@ -1,0 +1,4 @@
+# file: /Users/gavinzhu/Workspace/StayHungryStayFoolish/Algorithm/MachineLearning/study/RAGAS/ragas-evaluation-demo/src/evaluator.py
+# hypothesis_version: 6.151.4
+
+[0.0, 0.4, 0.6, 0.8, '-', '=', 'RAGAS 评测报告', 'RAGChain', 'answer', 'answer_relevancy', 'context_precision', 'context_recall', 'contexts', 'faithfulness', 'ground_truth', 'question', 'r', 'records', 'samples', 'utf-8', '📊 评测指标总览', '📋 评分解读']

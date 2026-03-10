@@ -1,0 +1,4 @@
+# file: /Users/gavinzhu/Workspace/StayHungryStayFoolish/Algorithm/MachineLearning/study/RAGAS/ragas-evaluation-demo/src/document_processor.py
+# hypothesis_version: 6.151.4
+
+[500, '**/*.txt', 'codec', 'decode', 'encoding', 'gb2312', 'gbk', 'latin-1', 'utf-8']
