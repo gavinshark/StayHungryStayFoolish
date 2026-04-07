@@ -3,48 +3,38 @@ package com.example.workflow.node;
 import com.example.workflow.model.WorkflowContext;
 import com.example.workflow.service.ChatService;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
 
 /**
- * NodeOne 单元测试
- * Validates: Requirements 5.1, 5.2, 5.3, 5.4
+ * NodeOne 集成测试 - 直接调用真实大模型
  */
-@ExtendWith(MockitoExtension.class)
+@SpringBootTest
 class NodeOneTest {
 
-    @Mock
+    @Autowired
     private ChatService chatService;
 
+    @Autowired
+    private NodeOne nodeOne;
+
     @Test
-    void process_shouldCallChatServiceAndStoreResult() {
-        // Arrange
-        String userInput = "测试输入内容";
-        String expectedPrompt = "请对以下内容进行初步分析：" + userInput;
-        String mockResponse = "这是大模型的分析结果";
-
-        when(chatService.chat(expectedPrompt)).thenReturn(mockResponse);
-
-        NodeOne nodeOne = new NodeOne(chatService);
+    void process_shouldCallRealModelAndStoreResult() {
+        String userInput = "Spring AI 是什么？请用一句话回答。";
         WorkflowContext context = new WorkflowContext(userInput);
 
-        // Act
         WorkflowContext result = nodeOne.process(context);
 
-        // Assert
         assertSame(context, result);
-        assertEquals(mockResponse, result.getNodeOneOutput());
-        verify(chatService, times(1)).chat(expectedPrompt);
-        verifyNoMoreInteractions(chatService);
+        assertNotNull(result.getNodeOneOutput());
+        assertFalse(result.getNodeOneOutput().isBlank());
+        System.out.println("NodeOne output: " + result.getNodeOneOutput());
     }
 
     @Test
     void getName_shouldReturnNodeOne() {
-        NodeOne nodeOne = new NodeOne(chatService);
         assertEquals("NodeOne", nodeOne.getName());
     }
 }
