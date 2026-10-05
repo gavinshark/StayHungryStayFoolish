@@ -8,11 +8,28 @@ import uuid
 import shutil
 from datetime import date
 
+try:
+    from pillow_heif import open_heif, register_heif_opener
+    register_heif_opener()
+except ImportError:
+    open_heif = None
+    register_heif_opener = None
+
 def formatTime(secs):
     str = time.strftime("%Y-%m-%d", time.localtime(secs))
     return str
 
 def getExifTime(imagePath):
+    if os.path.splitext(imagePath)[-1].lower() in ['.heic', '.heif']:
+        if open_heif is None:
+            raise RuntimeError('pillow-heif is required to read HEIC metadata')
+        exifData = open_heif(imagePath).info.get('exif')
+        if not exifData:
+            return None
+        exif = Image.Exif()
+        exif.load(exifData)
+        return exif.get(36867)
+
     imge = Image.open(imagePath)
     exifData = imge._getexif()
     imageDate = exifData[36867]
@@ -104,8 +121,30 @@ def formatImageName(imgPath, imgName):
         print('%s renamed to %s' % (rawpath, newpath))
     return imgName
 
+def convertHeicToJpg(imagePath):
+    """Convert a HEIC file after its source name has been normalized."""
+    if open_heif is None:
+        raise RuntimeError('pillow-heif is required to convert HEIC files')
+
+    jpgPath = os.path.splitext(imagePath)[0] + '.jpg'
+    heifImage = open_heif(imagePath)
+    # pillow-heif 1.x exposes the decoded pixel buffer as a memoryview;
+    # bytes() keeps this compatible with the Pillow version used by the project.
+    image = Image.frombytes(
+        heifImage.mode,
+        heifImage.size,
+        bytes(heifImage.data),
+        'raw',
+        heifImage.mode,
+        heifImage.stride,
+    ).convert('RGB')
+    image.save(jpgPath, 'JPEG', quality=95)
+    image.close()
+    print('%s converted to %s' % (imagePath, jpgPath))
+    return jpgPath
+
 def isValidImgFilePath(filePath):
-    validSuffixList = ['.jpg', '.bmp', '.jpeg', '.tiff', '.png', '.gif', '.raw', '.eps', '.svg']
+    validSuffixList = ['.jpg', '.bmp', '.jpeg', '.tiff', '.png', '.gif', '.raw', '.eps', '.svg', '.heic', '.heif']
     suffix = os.path.splitext(filePath)[-1]
     ret = False
     if suffix.lower() in validSuffixList:
@@ -122,35 +161,60 @@ def changeNameAndCopyFiles(srcPath, dstPath):
     total = 0
     abnormalImgs = []
     for imgName in os.listdir(srcPath):
-        imgName = formatImageName(srcPath, imgName)
-        rawpath = os.path.join(srcPath, imgName)
-        if os.path.isdir(imgName):
-            abnormalImgs.append(rawpath)
+        originalPath = os.path.join(srcPath, imgName)
+        if os.path.isdir(originalPath):
+            abnormalImgs.append(originalPath)
             continue
         if not isValidImgFilePath(imgName):
-            abnormalImgs.append(rawpath)
+            abnormalImgs.append(originalPath)
             continue
-        total += 1
+
+        isHeic = os.path.splitext(imgName)[-1].lower() in ['.heic', '.heif']
+        rawpath = originalPath
+        generatedJpgPath = None
         try:
-            imgTime, isExif = getImgTime(rawpath)
+            # HEIC metadata must be read before the file is renamed and converted.
+            if isHeic:
+                imgTime, isExif = getImgTime(rawpath)
+                imgName = formatImageName(srcPath, imgName)
+                rawpath = os.path.join(srcPath, imgName)
+                copyPath = convertHeicToJpg(rawpath)
+                generatedJpgPath = copyPath
+                copyName = os.path.basename(copyPath)
+            else:
+                imgName = formatImageName(srcPath, imgName)
+                rawpath = os.path.join(srcPath, imgName)
+                imgTime, isExif = getImgTime(rawpath)
+                copyPath = rawpath
+                copyName = imgName
+
+            total += 1
             result = re.sub(r':', '-', imgTime, flags=re.IGNORECASE)
             print(result)
-            tagpath =  os.path.join(dstPath, result+imgName)
+            tagpath = os.path.join(dstPath, result + copyName)
             #if not isExif:
             #    abnormalImgs.append(tagpath)
-            #addTag(rawpath, tagpath, imgTime)
-            shutil.copyfile(rawpath, tagpath)
-			
+            #addTag(copyPath, tagpath, imgTime)
+            shutil.copyfile(copyPath, tagpath)
+
         except Exception as e:
             print('failed to add tag for %s, exception is %s, but we still copy the files' % (imgName, str(e)))
             abnormalImgs.append(rawpath)
+        finally:
+            if generatedJpgPath is not None and os.path.exists(generatedJpgPath):
+                try:
+                    os.remove(generatedJpgPath)
+                    print('%s removed after copying' % generatedJpgPath)
+                except OSError as e:
+                    print('failed to remove generated JPG %s, exception is %s' % (generatedJpgPath, str(e)))
     return total, abnormalImgs
 
-srcPath = '.'
-dstPath = 'dst_copied_name_with_date'
-print('start to add tags from %s to %s:\n' % (srcPath, dstPath))
-total, abnormalImgs = changeNameAndCopyFiles(srcPath, dstPath)
-print('\n\nend with %d images adding tags, %d is abnormal' % (total, len(abnormalImgs)))
-if len(abnormalImgs) >0 :
-    for img in abnormalImgs:
-        print(img)
+if __name__ == '__main__':
+    srcPath = '.'
+    dstPath = 'dst_copied_name_with_date'
+    print('start to add tags from %s to %s:\n' % (srcPath, dstPath))
+    total, abnormalImgs = changeNameAndCopyFiles(srcPath, dstPath)
+    print('\n\nend with %d images adding tags, %d is abnormal' % (total, len(abnormalImgs)))
+    if len(abnormalImgs) >0 :
+        for img in abnormalImgs:
+            print(img)
