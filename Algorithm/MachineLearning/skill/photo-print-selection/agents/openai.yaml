@@ -1,4 +1,4 @@
 interface:
   display_name: "待打印照片挑选"
-  short_description: "筛选代表性、清晰且不重复的照片并复制待打印"
-  default_prompt: "使用 $photo-print-selection 从我的照片文件夹中筛选适合冲印的代表性照片，复制到待打印文件夹。"
+  short_description: "按确认流程筛选代表性照片并生成日期命名与水印版本"
+  default_prompt: "使用 $photo-print-selection 从我的照片文件夹中筛选适合冲印的代表性照片，并按确认流程生成三层结果。"
